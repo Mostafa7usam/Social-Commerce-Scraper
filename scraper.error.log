@@ -1,0 +1,9 @@
+/bin/bash: /Users/mostafahossam/Downloads/E-commerce Data/run_scraper.sh: Operation not permitted
+/bin/bash: /Users/mostafahossam/Downloads/E-commerce Data/run_scraper.sh: Operation not permitted
+/bin/bash: /Users/mostafahossam/Downloads/E-commerce Data/run_scraper.sh: Operation not permitted
+/bin/bash: /Users/mostafahossam/Downloads/E-commerce Data/run_scraper.sh: Operation not permitted
+/Library/Developer/CommandLineTools/usr/bin/python3: can't open file '/Users/mostafahossam/Downloads/E-commerce Data/scraper.py': [Errno 1] Operation not permitted
+Traceback (most recent call last):
+  File "/Users/mostafahossam/Projects/E-commerce Data/scraper.py", line 3, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
