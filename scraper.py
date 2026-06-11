@@ -316,7 +316,7 @@ def process_instagram_csv(input_csv, apify_token):
                         print(f"  Followers: {result['followers']}, Posts: {result['posts']}")
 
                     # STEP 3: Get external URL (bio link)
-                    external_url = ig_data.get('url', '') if ig_data else ''
+                    external_url = ig_data.get('externalUrl', '') if ig_data else ''
                     if not external_url:
                         print("  No external URL found")
                         result['status'] = 'no_url'
