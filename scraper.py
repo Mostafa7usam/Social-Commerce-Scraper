@@ -15,6 +15,8 @@ INPUT_CSV = 'instagram_urls.csv'
 DB_FILE = 'scraper.db'
 MAX_SHOPIFY_PAGES = 10
 REQUEST_TIMEOUT = 10
+SUPABASE_URL = 'https://seajrglfquchnppqxrhl.supabase.co'
+SUPABASE_KEY = 'sb_publishable_fLxoXW0T5Nck7gXYYWN79Q_FJgEOA6D'
 # ============================================================================
 
 
@@ -145,7 +147,7 @@ def scrape_website(url):
 
 
 # MAIN: Process CSV and output results to database
-def process_instagram_csv(input_csv, db_file, apify_token):
+# def process_instagram_csv(input_csv, db_file, apify_token):
     """Main function to process Instagram URLs from CSV and store in database"""
 
     conn = sqlite3.connect(db_file)
@@ -255,6 +257,123 @@ def process_instagram_csv(input_csv, db_file, apify_token):
 
     print(f"\n✓ Results saved to database: {db_file}")
 
+def process_instagram_csv(input_csv, apify_token):
+    """Main function to process Instagram URLs from CSV and store in Supabase"""
+
+    supabase_headers = {
+        'apikey': SUPABASE_KEY,
+        'Authorization': f'Bearer {SUPABASE_KEY}',
+        'Content-Type': 'application/json'
+    }
+
+    def save_to_supabase(result):
+        response = requests.post(
+            f'{SUPABASE_URL}/rest/v1/scraper_results',
+            headers=supabase_headers,
+            json=result
+        )
+        if response.status_code == 201:
+            print("  ✓ Saved to Supabase")
+        else:
+            print(f"  ✗ Supabase error: {response.text}")
+
+    try:
+        with open(input_csv, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+
+            for row in reader:
+                instagram_url = row.get('instagram_url', '').strip()
+                if not instagram_url:
+                    continue
+
+                print(f"\nProcessing: {instagram_url}")
+                result = {
+                    'date_added': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'instagram_url': instagram_url,
+                    'username': '',
+                    'followers': '',
+                    'posts': '',
+                    'platform': 'Unknown',
+                    'store_url': '',
+                    'products_count': 0,
+                    'products_json': '',
+                    'website_content': '',
+                    'status': 'failed',
+                    'error': ''
+                }
+
+                try:
+                    # STEP 1: Extract username
+                    username = instagram_url.rstrip('/').split('/')[-1]
+                    result['username'] = username
+                    print(f"  Username: {username}")
+
+                    # STEP 2: Scrape Instagram profile
+                    ig_data = scrape_instagram_apify(username, apify_token)
+                    if ig_data:
+                        result['followers'] = ig_data.get('followersCount', '')
+                        result['posts'] = ig_data.get('postsCount', '')
+                        print(f"  Followers: {result['followers']}, Posts: {result['posts']}")
+
+                    # STEP 3: Get external URL (bio link)
+                    external_url = ig_data.get('url', '') if ig_data else ''
+                    if not external_url:
+                        print("  No external URL found")
+                        result['status'] = 'no_url'
+                        save_to_supabase(result)
+                        continue
+
+                    result['store_url'] = external_url
+                    print(f"  External URL: {external_url}")
+
+                    # STEP 4: Handle Linktree
+                    actual_url = external_url
+                    if 'linktr.ee' in external_url or 'linktree.com' in external_url:
+                        print("  Linktree detected - extracting store URL...")
+                        shopify_url = extract_shopify_from_linktree(external_url)
+                        if shopify_url:
+                            actual_url = shopify_url
+                            print(f"  Found store: {shopify_url}")
+
+                    # STEP 5: Detect platform
+                    platform = detect_platform(actual_url)
+                    result['platform'] = platform
+                    print(f"  Platform: {platform}")
+
+                    # STEP 6: Scrape Shopify products if applicable
+                    if platform == 'Shopify':
+                        print("  Scraping Shopify products...")
+                        products = scrape_shopify_products(actual_url)
+                        if products:
+                            result['products_count'] = len(products)
+                            result['products_json'] = json.dumps(products)
+                            print(f"  Found {len(products)} products")
+                        else:
+                            print("  No products found")
+
+                    # STEP 7: Scrape website content
+                    print("  Scraping website content...")
+                    content = scrape_website(actual_url)
+                    result['website_content'] = content[:1000] if content else ''
+
+                    result['status'] = 'success'
+                    print("  ✓ Success")
+
+                except Exception as e:
+                    result['error'] = str(e)
+                    print(f"  ✗ Error: {e}")
+
+                # Save result to Supabase
+                save_to_supabase(result)
+
+    except FileNotFoundError:
+        print(f"Error: Input file '{input_csv}' not found")
+
+    print(f"\n✓ All results saved to Supabase")
+
 
 if __name__ == '__main__':
-    process_instagram_csv(INPUT_CSV, DB_FILE, APIFY_TOKEN)
+    process_instagram_csv(INPUT_CSV, APIFY_TOKEN)
+
+#if __name__ == '__main__':
+#    process_instagram_csv(INPUT_CSV, DB_FILE, APIFY_TOKEN)
