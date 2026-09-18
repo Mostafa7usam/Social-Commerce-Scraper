@@ -1,10 +1,20 @@
 import json
-from scraper import scrape_instagram_apify
+from scraper import scrape_shopify_products, detect_platform
 
-# Test with a test URL (replace with your desired URL)
-TEST_URL = "locken.co"
-APIFY_TOKEN = 'apify_api_CzYokXbkgSiq8nhZ5jAKDX4EqojmLb3G6FnX'
+# Test with a Shopify store URL (replace with your desired store)
+TEST_URL = "https://shoplocken.co"
 
-#` Test 4: Scrape Instagram using Apify (if applicable)
-instagram_data = scrape_instagram_apify(TEST_URL, APIFY_TOKEN)
-print(f"Instagram Data: {json.dumps(instagram_data, indent=2)}\n")      
+# Test 1: Confirm the site is detected as Shopify
+platform = detect_platform(TEST_URL)
+print(f"Detected platform: {platform}\n")
+
+# Test 2: Scrape products and check product_url is populated
+products = scrape_shopify_products(TEST_URL, max_pages=1)
+
+print(f"Found {len(products)} product(s)\n")
+
+for product in products[:3]:  # just preview the first 3
+    print(json.dumps(product, indent=2))
+    print("-" * 40)
+
+
