@@ -1622,3 +1622,37 @@ Apify scraping error: 404 Client Error: Not Found for url: https://api.apify.com
   No external URL found
 
 ✓ Results saved to database: scraper.db
+
+Processing: https://www.instagram.com/blackeditionshop
+  Username: blackeditionshop
+Apify URL: https://api.apify.com/v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items
+Payload: {'usernames': ['blackeditionshop']}
+Apify scraping error: HTTPSConnectionPool(host='api.apify.com', port=443): Max retries exceeded with url: /v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x105152150>: Failed to resolve 'api.apify.com' ([Errno 8] nodename nor servname provided, or not known)"))
+  No external URL found
+  ✗ Error: HTTPSConnectionPool(host='seajrglfquchnppqxrhl.supabase.co', port=443): Max retries exceeded with url: /rest/v1/scraper_results (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x1056571a0>: Failed to resolve 'seajrglfquchnppqxrhl.supabase.co' ([Errno 8] nodename nor servname provided, or not known)"))
+
+Processing: https://www.instagram.com/blackeditionshop
+  Username: blackeditionshop
+Apify URL: https://api.apify.com/v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items
+Payload: {'usernames': ['blackeditionshop']}
+Status: 201
+  Followers: 128048, Posts: 210
+  External URL: http://www.blackeditionshop.com/
+  Platform: Shopify
+  Scraping Shopify products...
+  Found 170 products
+  Scraping website content...
+  ✓ Success
+
+Processing: https://www.instagram.com/blackeditionshop
+  Username: blackeditionshop
+Apify URL: https://api.apify.com/v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items
+Payload: {'usernames': ['blackeditionshop']}
+Status: 201
+  Followers: 129458, Posts: 
+  External URL: http://www.blackeditionshop.com/
+  Platform: Shopify
+  Scraping Shopify products...
+  Found 138 products
+  Scraping website content...
+  ✓ Success

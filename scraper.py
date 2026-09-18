@@ -122,7 +122,9 @@ def scrape_shopify_products(shopify_url, max_pages=MAX_SHOPIFY_PAGES):
                     break
 
                 for product in page_products:
+                    handle = product.get('handle', '')
                     products.append({
+                        'product_url': f"{base_url}/products/{handle}" if handle else '',
                         'product_title': product.get('title', ''),
                         'product_description': product.get('body_html', ''),
                         'price': product['variants'][0].get('price', '') if product.get('variants') else '',
