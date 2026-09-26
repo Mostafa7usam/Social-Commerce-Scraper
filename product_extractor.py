@@ -1,4 +1,6 @@
+import csv
 import json
+import os
 import requests
 
 # Reuse the same config values as scraper.py
@@ -11,12 +13,53 @@ supabase_headers = {
     'Content-Type': 'application/json'
 }
 
+# Path to the CSV of shop URLs to process. No header row, one URL per row.
+INSTAGRAM_URLS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instagram_urls.csv')
 
-def fetch_scraper_results_with_products():
+
+def _normalize_url(url):
+    """Lowercase + strip whitespace and trailing slash so URL variants match."""
+    if not url:
+        return ''
+    return url.strip().rstrip('/').lower()
+
+
+def load_shop_urls_from_csv(csv_path=INSTAGRAM_URLS_CSV):
     """
-    Step 1: GET all rows from scraper_results where products_json is not null.
-    Step 2: Group those rows by shop (using instagram_url as the shop identifier).
-    Step 3: Within each group, keep only the row with the latest date_added,
+    Reads a headerless, single-column CSV of Instagram shop URLs
+    (e.g. https://www.instagram.com/brava_cairo) into a set of
+    normalized URLs used to filter which shops get processed.
+    Returns an empty set (and prints a warning) if the file is missing
+    or contains no usable rows.
+    """
+    if not os.path.exists(csv_path):
+        print(f"✗ CSV not found at {csv_path}\n")
+        return set()
+
+    urls = set()
+    with open(csv_path, newline='', encoding='utf-8') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if not row:
+                continue
+            url = row[0].strip()
+            if url:
+                urls.add(_normalize_url(url))
+
+    print(f"Loaded {len(urls)} shop URL(s) from {csv_path}\n")
+    return urls
+
+
+def fetch_scraper_results_with_products(allowed_urls=None):
+    """
+    Step 1: GET all rows from scraper_results where products_json is not null
+            (no filtering happens in the Supabase query itself).
+    Step 2: Filter those rows in Python, keeping only ones whose instagram_url
+            is present in allowed_urls (if provided) — checked via normalized
+            comparison so case/trailing-slash differences don't cause misses.
+    Step 3: Group the remaining rows by shop (using instagram_url as the shop
+            identifier).
+    Step 4: Within each group, keep only the row with the latest date_added,
             discarding older scrapes of the same shop.
     Returns: a list of scraper_results rows (id, instagram_url, date_added,
              products_json), one per shop, representing its most recent scrape.
@@ -37,6 +80,10 @@ def fetch_scraper_results_with_products():
     for row in all_rows:
         shop_key = row.get('instagram_url')
         if not shop_key:
+            continue
+
+        # Only keep shops present in the CSV, if a filter list was given.
+        if allowed_urls is not None and _normalize_url(shop_key) not in allowed_urls:
             continue
 
         existing = latest_by_shop.get(shop_key)
@@ -94,24 +141,32 @@ def insert_products_batch(rows):
         print(f"  ✗ Insert error: {response.status_code} {response.text}")
 
 
-def process_products_to_supabase():
+def process_products_to_supabase(csv_path=INSTAGRAM_URLS_CSV):
     """
-    Main entry point — full refresh of scraper_products.
-    Step 1: Wipe the entire scraper_products table (clear_scraper_products()).
-    Step 2: Fetch the latest scraper_results row per shop
-            (fetch_scraper_results_with_products()).
-    Step 3: For each shop's row, parse its products_json string into a
-            Python list of product dicts.
-    Step 4: Map each product's fields (product_title, product_description,
+    Main entry point — full refresh of scraper_products, scoped to the
+    shops listed in instagram_urls.csv.
+    Step 1: Load the allowed shop URLs from the CSV.
+    Step 2: Wipe the entire scraper_products table (clear_scraper_products()),
+            same as before.
+    Step 3: Fetch every scraper_results row with products_json, then filter
+            in Python down to only the shops whose instagram_url is in the CSV.
+    Step 4: For each remaining shop's row, parse its products_json string into
+            a Python list of product dicts.
+    Step 5: Map each product's fields (product_title, product_description,
             price, product_url, src) onto the scraper_products column names,
             tagging each with its parent scraper_result_id.
-    Step 5: Bulk insert that shop's product rows (insert_products_batch()).
+    Step 6: Bulk insert that shop's product rows (insert_products_batch()).
     Skips any row with missing/empty/invalid products_json rather than failing.
     """
+    allowed_urls = load_shop_urls_from_csv(csv_path)
+    if not allowed_urls:
+        print("✗ No shop URLs loaded — aborting so we don't wipe scraper_products for nothing.\n")
+        return
+
     clear_scraper_products()
 
-    results = fetch_scraper_results_with_products()
-    print(f"Found {len(results)} scraper_results row(s) with products_json\n")
+    results = fetch_scraper_results_with_products(allowed_urls=allowed_urls)
+    print(f"Found {len(results)} scraper_results row(s) with products_json for the listed shops\n")
 
     for row in results:
         result_id = row.get('id')
