@@ -1,9 +1,9 @@
 import json
-import requests
 
 from product_extractor import (
     SUPABASE_URL,
     supabase_headers,
+    fetch_scraper_results_with_products,
     clear_scraper_products,
     insert_products_batch
 )
@@ -17,35 +17,31 @@ DRY_RUN = False
 
 def fetch_single_scraper_result(instagram_url):
     """
-    GETs scraper_results filtered to a single instagram_url, sorted by
-    date_added descending, limited to 1 row — i.e. the most recent scrape
-    for that one shop. Returns that row as a dict, or None if no match.
-    Unlike fetch_scraper_results_with_products() in populate_scraper_products.py
-    (which fetches + dedupes ALL shops), this targets exactly one shop for testing.
+    Reuses the real fetch_scraper_results_with_products() from
+    product_extractor.py — the exact function process_products_to_supabase()
+    calls in production — scoped down to a single shop by passing an
+    allowed_urls set containing just that one URL (assumed to match
+    Supabase's stored instagram_url exactly).
+    This means the test exercises the same server-side in.() filtering
+    logic that runs for real, instead of a separate hand-rolled query.
+    Returns the latest scraper_results row for that shop as a dict,
+    or None if no match.
     """
-    response = requests.get(
-        f'{SUPABASE_URL}/rest/v1/scraper_results',
-        headers=supabase_headers,
-        params={
-            'select': 'id,instagram_url,date_added,products_json',
-            'instagram_url': f'eq.{instagram_url}',
-            'order': 'date_added.desc',
-            'limit': 1
-        }
-    )
-    response.raise_for_status()
-    rows = response.json()
-    return rows[0] if rows else None
+    allowed_urls = {instagram_url}
+    results = fetch_scraper_results_with_products(allowed_urls=allowed_urls)
+    return results[0] if results else None
 
 
 def main():
     """
     Test entry point — runs the same logic as process_products_to_supabase()
-    but scoped to one shop, so you can verify correctness safely.
-    Step 1: Fetch the latest scraper_results row for TEST_INSTAGRAM_URL.
+    but scoped to one shop, using the real product_extractor.py functions,
+    so you can verify correctness safely before running a full refresh.
+    Step 1: Fetch the latest scraper_results row for TEST_INSTAGRAM_URL via
+            fetch_scraper_results_with_products(allowed_urls={...}).
     Step 2: Parse its products_json into a list of product dicts.
     Step 3: Map each product's fields onto the scraper_products column names
-            (same mapping used in populate_scraper_products.py).
+            (same mapping used in product_extractor.py).
     Step 4: Print a preview of the first 3 rows that would be inserted.
     Step 5: If DRY_RUN is True, stop here — nothing is written to Supabase.
             If DRY_RUN is False, delete only this shop's existing rows in
@@ -56,7 +52,9 @@ def main():
     row = fetch_single_scraper_result(TEST_INSTAGRAM_URL)
 
     if not row:
-        print("No matching row found. Check TEST_INSTAGRAM_URL matches exactly what's in Supabase.")
+        print("No matching row found. Check TEST_INSTAGRAM_URL matches exactly what's in Supabase")
+        print("(comparison is normalized — case and trailing slash don't matter, but the")
+        print("rest of the URL must match).")
         return
 
     result_id = row.get('id')

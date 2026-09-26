@@ -17,18 +17,13 @@ supabase_headers = {
 INSTAGRAM_URLS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instagram_urls.csv')
 
 
-def _normalize_url(url):
-    """Lowercase + strip whitespace and trailing slash so URL variants match."""
-    if not url:
-        return ''
-    return url.strip().rstrip('/').lower()
-
-
 def load_shop_urls_from_csv(csv_path=INSTAGRAM_URLS_CSV):
     """
     Reads a headerless, single-column CSV of Instagram shop URLs
-    (e.g. https://www.instagram.com/brava_cairo) into a set of
-    normalized URLs used to filter which shops get processed.
+    (e.g. https://www.instagram.com/brava_cairo) into a set of URLs used
+    to filter which shops get processed. Assumes each URL matches its
+    corresponding instagram_url value in Supabase exactly (no case or
+    trailing-slash normalization is applied).
     Returns an empty set (and prints a warning) if the file is missing
     or contains no usable rows.
     """
@@ -44,7 +39,7 @@ def load_shop_urls_from_csv(csv_path=INSTAGRAM_URLS_CSV):
                 continue
             url = row[0].strip()
             if url:
-                urls.add(_normalize_url(url))
+                urls.add(url)
 
     print(f"Loaded {len(urls)} shop URL(s) from {csv_path}\n")
     return urls
@@ -52,27 +47,39 @@ def load_shop_urls_from_csv(csv_path=INSTAGRAM_URLS_CSV):
 
 def fetch_scraper_results_with_products(allowed_urls=None):
     """
-    Step 1: GET all rows from scraper_results where products_json is not null
-            (no filtering happens in the Supabase query itself).
-    Step 2: Filter those rows in Python, keeping only ones whose instagram_url
-            is present in allowed_urls (if provided) — checked via normalized
-            comparison so case/trailing-slash differences don't cause misses.
-    Step 3: Group the remaining rows by shop (using instagram_url as the shop
-            identifier).
-    Step 4: Within each group, keep only the row with the latest date_added,
-            discarding older scrapes of the same shop.
+    Step 1: GET rows from scraper_results where products_json is not null,
+            scoped server-side to only the shops in allowed_urls (if given)
+            via an 'instagram_url=in.(...)' filter. Assumes the CSV's URLs
+            match Supabase's stored instagram_url values exactly (no
+            normalization applied), so the DB only ever scans/returns rows
+            for the shops we actually need instead of the whole table —
+            this is what avoids the statement timeout (error 57014).
+    Step 2: Group the returned rows by shop (instagram_url) and keep only
+            the one with the latest date_added, discarding older scrapes
+            of the same shop.
     Returns: a list of scraper_results rows (id, instagram_url, date_added,
              products_json), one per shop, representing its most recent scrape.
     """
+    params = {
+        'select': 'id,instagram_url,date_added,products_json',
+        'products_json': 'not.is.null'
+    }
+
+    if allowed_urls is not None:
+        if not allowed_urls:
+            # Nothing to fetch — avoid sending a malformed empty in.() filter.
+            return []
+        quoted = ','.join(f'"{u}"' for u in allowed_urls)
+        params['instagram_url'] = f'in.({quoted})'
+
     response = requests.get(
         f'{SUPABASE_URL}/rest/v1/scraper_results',
         headers=supabase_headers,
-        params={
-            'select': 'id,instagram_url,date_added,products_json',
-            'products_json': 'not.is.null'
-        }
+        params=params
     )
-    response.raise_for_status()
+    if not response.ok:
+        print(f"✗ Fetch error: {response.status_code} {response.text}\n")
+        response.raise_for_status()
     all_rows = response.json()
 
     # Keep only the latest row per shop (instagram_url), by date_added
@@ -80,10 +87,6 @@ def fetch_scraper_results_with_products(allowed_urls=None):
     for row in all_rows:
         shop_key = row.get('instagram_url')
         if not shop_key:
-            continue
-
-        # Only keep shops present in the CSV, if a filter list was given.
-        if allowed_urls is not None and _normalize_url(shop_key) not in allowed_urls:
             continue
 
         existing = latest_by_shop.get(shop_key)
