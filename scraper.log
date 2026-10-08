@@ -1656,3 +1656,5 @@ Status: 201
   Found 138 products
   Scraping website content...
   ✓ Success
+
+✓ All results saved to Supabase
