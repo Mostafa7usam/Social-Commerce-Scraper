@@ -6,7 +6,7 @@ import requests
 
 # Reuse the same config values as scraper.py
 SUPABASE_URL = 'https://seajrglfquchnppqxrhl.supabase.co'
-SUPABASE_KEY = os.environ.get('SUPABASE_KEY', 'sb_publishable_fLxoXW0T5Nck7gXYYWN79Q_FJgEOA6D')
+SUPABASE_KEY = 'sb_publishable_fLxoXW0T5Nck7gXYYWN79Q_FJgEOA6D'
 
 supabase_headers = {
     'apikey': SUPABASE_KEY,
@@ -55,6 +55,10 @@ def _chunks(items, size):
         yield items[i:i + size]
 
 
+class _RetryableServerError(Exception):
+    """5xx response; worth retrying."""
+
+
 def _get_paginated(params):
     """
     GETs scraper_results with pagination (Range header) and retries.
@@ -78,7 +82,7 @@ def _get_paginated(params):
                     timeout=REQUEST_TIMEOUT
                 )
                 if response.status_code >= 500:
-                    raise requests.exceptions.HTTPError(
+                    raise _RetryableServerError(
                         f"{response.status_code} {response.text[:200]}")
                 if not response.ok:
                     print(f"✗ Fetch error: {response.status_code} {response.text}\n")
@@ -88,7 +92,7 @@ def _get_paginated(params):
             except (requests.exceptions.ChunkedEncodingError,
                     requests.exceptions.ConnectionError,
                     requests.exceptions.Timeout,
-                    requests.exceptions.HTTPError) as e:
+                    _RetryableServerError) as e:
                 if attempt == MAX_RETRIES:
                     print(f"✗ Giving up after {MAX_RETRIES} attempts: {e}\n")
                     raise
@@ -141,7 +145,7 @@ def _fetch_id_chunk(id_chunk):
     }
     try:
         return _get_paginated(params)
-    except (requests.exceptions.RequestException, ValueError) as e:
+    except (requests.exceptions.RequestException, _RetryableServerError, ValueError) as e:
         if len(id_chunk) == 1:
             print(f"  ✗ Skipping id={id_chunk[0]}, could not fetch products_json: {type(e).__name__}")
             return []
