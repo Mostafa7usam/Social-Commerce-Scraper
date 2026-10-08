@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import time
 import requests
 
 # Reuse the same config values as scraper.py
@@ -17,9 +18,10 @@ supabase_headers = {
 INSTAGRAM_URLS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instagram_urls.csv')
 
 URL_CHUNK_SIZE = 10      # shop URLs per request when fetching lightweight metadata
-ID_CHUNK_SIZE = 10       # row ids per request when fetching the heavy products_json
+ID_CHUNK_SIZE = 1        # one row per request; products_json blobs are large
 PAGE_SIZE = 1000         # PostgREST default max rows per response
 REQUEST_TIMEOUT = 60     # seconds, client-side
+MAX_RETRIES = 4          # retries on dropped connections / timeouts / 5xx
 
 
 def load_shop_urls_from_csv(csv_path=INSTAGRAM_URLS_CSV):
@@ -55,9 +57,9 @@ def _chunks(items, size):
 
 def _get_paginated(params):
     """
-    GETs scraper_results with the given params, following pagination via the
-    Range header so we never silently truncate at PostgREST's 1000-row cap.
-    Returns the combined list of rows. Raises on any HTTP error.
+    GETs scraper_results with pagination (Range header) and retries.
+    Retries on dropped connections, timeouts and 5xx responses with
+    exponential backoff. Returns the combined list of rows.
     """
     rows = []
     offset = 0
@@ -66,17 +68,34 @@ def _get_paginated(params):
         headers['Range-Unit'] = 'items'
         headers['Range'] = f'{offset}-{offset + PAGE_SIZE - 1}'
 
-        response = requests.get(
-            f'{SUPABASE_URL}/rest/v1/scraper_results',
-            headers=headers,
-            params=params,
-            timeout=REQUEST_TIMEOUT
-        )
-        if not response.ok:
-            print(f"✗ Fetch error: {response.status_code} {response.text}\n")
-            response.raise_for_status()
+        page = None
+        for attempt in range(1, MAX_RETRIES + 1):
+            try:
+                response = requests.get(
+                    f'{SUPABASE_URL}/rest/v1/scraper_results',
+                    headers=headers,
+                    params=params,
+                    timeout=REQUEST_TIMEOUT
+                )
+                if response.status_code >= 500:
+                    raise requests.exceptions.HTTPError(
+                        f"{response.status_code} {response.text[:200]}")
+                if not response.ok:
+                    print(f"✗ Fetch error: {response.status_code} {response.text}\n")
+                    response.raise_for_status()
+                page = response.json()
+                break
+            except (requests.exceptions.ChunkedEncodingError,
+                    requests.exceptions.ConnectionError,
+                    requests.exceptions.Timeout,
+                    requests.exceptions.HTTPError) as e:
+                if attempt == MAX_RETRIES:
+                    print(f"✗ Giving up after {MAX_RETRIES} attempts: {e}\n")
+                    raise
+                wait = 2 ** attempt
+                print(f"  ⚠ Attempt {attempt} failed ({type(e).__name__}); retrying in {wait}s...")
+                time.sleep(wait)
 
-        page = response.json()
         rows.extend(page)
         if len(page) < PAGE_SIZE:
             break
@@ -110,19 +129,35 @@ def fetch_latest_row_ids(allowed_urls):
     return latest
 
 
+def _fetch_id_chunk(id_chunk):
+    """
+    Fetches products_json for a list of ids. If the request fails (timeout,
+    truncated response), splits the chunk in half and retries each half,
+    down to a single id. A single id that still fails is skipped with a warning.
+    """
+    params = {
+        'select': 'id,instagram_url,date_added,products_json',
+        'id': f'in.({",".join(str(i) for i in id_chunk)})'
+    }
+    try:
+        return _get_paginated(params)
+    except (requests.exceptions.RequestException, ValueError) as e:
+        if len(id_chunk) == 1:
+            print(f"  ✗ Skipping id={id_chunk[0]}, could not fetch products_json: {type(e).__name__}")
+            return []
+        mid = len(id_chunk) // 2
+        print(f"  ! Chunk of {len(id_chunk)} failed, splitting...")
+        return _fetch_id_chunk(id_chunk[:mid]) + _fetch_id_chunk(id_chunk[mid:])
+
+
 def fetch_products_json_for_ids(ids):
     """
     Step 2 (heavy): fetch id, instagram_url, date_added, products_json for
-    just the given row ids, ID_CHUNK_SIZE at a time.
-    Returns: list of scraper_results rows.
+    just the given row ids, ID_CHUNK_SIZE at a time (auto-splitting on failure).
     """
     rows = []
     for id_chunk in _chunks(ids, ID_CHUNK_SIZE):
-        params = {
-            'select': 'id,instagram_url,date_added,products_json',
-            'id': f'in.({",".join(str(i) for i in id_chunk)})'
-        }
-        rows.extend(_get_paginated(params))
+        rows.extend(_fetch_id_chunk(id_chunk))
         print(f"  Fetched products_json for {len(rows)}/{len(ids)} row(s)")
     return rows
 
