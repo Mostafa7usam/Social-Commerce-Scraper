@@ -6,6 +6,7 @@ import requests
 import os
 import sqlite3
 from datetime import datetime
+import re
 
 # ============================================================================
 # CONFIGURATION - Update these variables before running
@@ -103,35 +104,92 @@ def extract_shopify_from_linktree(linktree_url):
 
 
 # HELPER: Scrape Shopify products
-def scrape_shopify_products(shopify_url, max_pages=MAX_SHOPIFY_PAGES):
-    """Scrape all products from Shopify store"""
-    products = []
+KIDS_RE = re.compile(r"\b(kids?|boys?|girls?|baby|babies|toddlers?|infants?|juniors?|youth|child|children)\b")
+WOMEN_RE = re.compile(r"\b(women'?s?|woman|ladies|lady|female)\b")
+MEN_RE = re.compile(r"\b(men'?s?|man|male|gents?)\b")
 
-    # Ensure URL ends with /products.json for API access
+SIZE_NAMES = ('size', 'taglia', 'talla', 'taille', 'größe')
+COLOR_NAMES = ('color', 'colour', 'colore', 'couleur', 'farbe')
+
+
+def detect_category(product):
+    """Best-effort gender/age category from tags, type, title, handle"""
+    tags = product.get('tags', [])
+    if isinstance(tags, str):
+        tags = [t.strip() for t in tags.split(',')]
+    text = ' '.join([
+        ' '.join(tags),
+        product.get('product_type', ''),
+        product.get('title', ''),
+        product.get('handle', '').replace('-', ' '),
+    ]).lower()
+
+    if KIDS_RE.search(text):
+        return 'kids'
+    is_women = bool(WOMEN_RE.search(text))
+    is_men = bool(MEN_RE.search(WOMEN_RE.sub(' ', text)))  # avoid "men" inside "women"
+    if is_women and is_men:
+        return 'unisex'
+    if is_women:
+        return 'women'
+    if is_men:
+        return 'men'
+    return 'unknown'
+
+
+def extract_options(product, in_stock_variants):
+    """Collect sizes/colors only from variants that are in stock"""
+    size_idx, color_idx = None, None
+    for i, opt in enumerate(product.get('options', []), start=1):
+        name = opt.get('name', '').lower()
+        if any(n in name for n in SIZE_NAMES):
+            size_idx = i
+        elif any(n in name for n in COLOR_NAMES):
+            color_idx = i
+
+    sizes, colors = [], []
+    for v in in_stock_variants:
+        if size_idx and v.get(f'option{size_idx}') and v[f'option{size_idx}'] not in sizes:
+            sizes.append(v[f'option{size_idx}'])
+        if color_idx and v.get(f'option{color_idx}') and v[f'option{color_idx}'] not in colors:
+            colors.append(v[f'option{color_idx}'])
+    return sizes, colors
+
+
+def scrape_shopify_products(shopify_url, max_pages=MAX_SHOPIFY_PAGES):
+    """Scrape in-stock products with category, sizes and colors"""
+    products = []
     base_url = shopify_url.rstrip('/').replace('/products.json', '')
     api_url = f"{base_url}/products.json"
 
     for page in range(1, max_pages + 1):
         try:
             response = requests.get(f"{api_url}?page={page}&limit=250", timeout=REQUEST_TIMEOUT)
-            if response.status_code == 200:
-                data = response.json()
-                page_products = data.get('products', [])
+            if response.status_code != 200:
+                break
+            page_products = response.json().get('products', [])
+            if not page_products:
+                break
 
-                if not page_products:
-                    break
+            for product in page_products:
+                in_stock = [v for v in product.get('variants', []) if v.get('available')]
+                if not in_stock:
+                    continue  # skip fully out-of-stock products
 
-                for product in page_products:
-                    handle = product.get('handle', '')
-                    products.append({
-                        'product_url': f"{base_url}/products/{handle}" if handle else '',
-                        'product_title': product.get('title', ''),
-                        'product_description': product.get('body_html', ''),
-                        'price': product['variants'][0].get('price', '') if product.get('variants') else '',
-                        'compare_at_price': product['variants'][0].get('compare_at_price', '') if product.get('variants') else '',
-                        'src': product['images'][0].get('src', '') if product.get('images') else ''
-                    })
-        except:
+                sizes, colors = extract_options(product, in_stock)
+                handle = product.get('handle', '')
+                products.append({
+                    'product_url': f"{base_url}/products/{handle}" if handle else '',
+                    'product_title': product.get('title', ''),
+                    'product_description': product.get('body_html', ''),
+                    'category': detect_category(product),
+                    'sizes': sizes,
+                    'colors': colors,
+                    'price': in_stock[0].get('price', ''),
+                    'compare_at_price': in_stock[0].get('compare_at_price', ''),
+                    'src': product['images'][0].get('src', '') if product.get('images') else ''
+                })
+        except Exception:
             break
 
     return products

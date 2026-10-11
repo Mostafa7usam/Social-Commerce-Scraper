@@ -272,7 +272,10 @@ def process_products_to_supabase(csv_path=INSTAGRAM_URLS_CSV):
             'product_description': p.get('product_description', ''),
             'price': p.get('price', ''),
             'product_url': p.get('product_url', ''),
-            'product_image_src': p.get('src', '')
+            'product_image_src': p.get('src', ''),
+            'category': p.get('category', 'unknown'),
+            'sizes': p.get('sizes') or [],
+            'colors': p.get('colors') or []
         } for p in products]
 
         insert_products_batch(product_rows)
