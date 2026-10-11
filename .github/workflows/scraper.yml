@@ -21,12 +21,12 @@ jobs:
       - name: Install dependencies
         run: pip install requests
 
-##      - name: Run scraper
- ##       env:
-   ##       APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-    ##      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      ##    SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-    ##    run: python3 scraper.py
+      - name: Run scraper
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: python3 scraper.py
 
       - name: Run product extractor
         env:
