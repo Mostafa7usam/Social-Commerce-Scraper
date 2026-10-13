@@ -3,6 +3,11 @@ import json
 import os
 import time
 import requests
+import re
+
+FOOTWEAR_MIN_SIZE = 35
+FOOTWEAR_MAX_SIZE = 48
+
 
 # Reuse the same config values as scraper.py
 SUPABASE_URL = 'https://seajrglfquchnppqxrhl.supabase.co'
@@ -23,6 +28,24 @@ PAGE_SIZE = 1000         # PostgREST default max rows per response
 REQUEST_TIMEOUT = 60     # seconds, client-side
 MAX_RETRIES = 4          # retries on dropped connections / timeouts / 5xx
 
+
+def is_footwear(sizes):
+    """
+    True if any size contains a number from 35 to 48 (inclusive).
+    Handles values like "40", "42.5", "EU 43", "36-38", "41,5".
+    Clothing sizes like "S", "M", "XL" are ignored.
+    """
+    if not sizes:
+        return False
+    if isinstance(sizes, str):
+        sizes = [sizes]
+
+    for size in sizes:
+        for num in re.findall(r'\d+(?:[.,]\d+)?', str(size)):
+            value = float(num.replace(',', '.'))
+            if FOOTWEAR_MIN_SIZE <= value <= FOOTWEAR_MAX_SIZE:
+                return True
+    return False
 
 def load_shop_urls_from_csv(csv_path=INSTAGRAM_URLS_CSV):
     """
@@ -275,7 +298,8 @@ def process_products_to_supabase(csv_path=INSTAGRAM_URLS_CSV):
             'product_image_src': p.get('src', ''),
             'category': p.get('category', 'unknown'),
             'sizes': p.get('sizes') or [],
-            'colors': p.get('colors') or []
+            'colors': p.get('colors') or [],
+            'footwear': is_footwear(p.get('sizes'))
         } for p in products]
 
         insert_products_batch(product_rows)
