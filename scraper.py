@@ -247,7 +247,9 @@ def process_instagram_csv(input_csv, apify_token):
                     'products_json': '',
                     'website_content': '',
                     'status': 'failed',
-                    'error': ''
+                    'error': '',
+                    'display_name': '',          # NEW
+                    'profile_pic_url': '',       # NEW
                 }
 
                 try:
@@ -262,7 +264,17 @@ def process_instagram_csv(input_csv, apify_token):
                         result['followers'] = ig_data.get('followersCount', '')
                         result['posts'] = ig_data.get('postsCount', '')
                         print(f"  Followers: {result['followers']}, Posts: {result['posts']}")
-
+                        result['display_name'] = ig_data.get('fullName') or ig_data.get('full_name') or ''
+                        result['profile_pic_url'] = (
+                                ig_data.get('profilePicUrlHD')
+                                or ig_data.get('profilePicUrl')
+                                or ig_data.get('profile_pic_url')
+                                or ''
+                            )
+                        result['followers'] = ig_data.get('followersCount', '')
+                        result['posts'] = ig_data.get('postsCount', '')
+                        print(f"  Display name: {result['display_name']}")
+                        print(f"  Followers: {result['followers']}, Posts: {result['posts']}")
                     # STEP 3: Get external URL (bio link)
                     external_url = ig_data.get('externalUrl', '') if ig_data else ''
                     if not external_url:

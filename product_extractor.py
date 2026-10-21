@@ -163,8 +163,8 @@ def _fetch_id_chunk(id_chunk):
     down to a single id. A single id that still fails is skipped with a warning.
     """
     params = {
-        'select': 'id,instagram_url,date_added,products_json',
-        'id': f'in.({",".join(str(i) for i in id_chunk)})'
+    'select': 'id,instagram_url,date_added,display_name,profile_pic_url,products_json',
+    'id': f'in.({",".join(str(i) for i in id_chunk)})'
     }
     try:
         return _get_paginated(params)
@@ -299,7 +299,9 @@ def process_products_to_supabase(csv_path=INSTAGRAM_URLS_CSV):
             'category': p.get('category', 'unknown'),
             'sizes': p.get('sizes') or [],
             'colors': p.get('colors') or [],
-            'footwear': is_footwear(p.get('sizes'))
+            'footwear': is_footwear(p.get('sizes')),
+            'display_name': row.get('display_name') or '',
+            'profile_pic_url': row.get('profile_pic_url') or ''
         } for p in products]
 
         insert_products_batch(product_rows)

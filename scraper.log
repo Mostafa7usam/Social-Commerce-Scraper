@@ -1666,3 +1666,11 @@ Payload: {'usernames': ['bulga.co']}
 Apify scraping error: HTTPSConnectionPool(host='api.apify.com', port=443): Max retries exceeded with url: /v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x1013a58e0>: Failed to resolve 'api.apify.com' ([Errno 8] nodename nor servname provided, or not known)"))
   No external URL found
   ✗ Error: HTTPSConnectionPool(host='seajrglfquchnppqxrhl.supabase.co', port=443): Max retries exceeded with url: /rest/v1/scraper_results (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x100df2300>: Failed to resolve 'seajrglfquchnppqxrhl.supabase.co' ([Errno 8] nodename nor servname provided, or not known)"))
+
+Processing: https://www.instagram.com/bulga.co/
+  Username: bulga.co
+Apify URL: https://api.apify.com/v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items
+Payload: {'usernames': ['bulga.co']}
+Apify scraping error: HTTPSConnectionPool(host='api.apify.com', port=443): Max retries exceeded with url: /v2/acts/dSCLg0C3YEZ83HzYX/run-sync-get-dataset-items (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x103001fd0>: Failed to resolve 'api.apify.com' ([Errno 8] nodename nor servname provided, or not known)"))
+  No external URL found
+  ✗ Error: HTTPSConnectionPool(host='seajrglfquchnppqxrhl.supabase.co', port=443): Max retries exceeded with url: /rest/v1/scraper_results (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x102346060>: Failed to resolve 'seajrglfquchnppqxrhl.supabase.co' ([Errno 8] nodename nor servname provided, or not known)"))
