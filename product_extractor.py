@@ -10,14 +10,15 @@ FOOTWEAR_MAX_SIZE = 48
 
 
 # Reuse the same config values as scraper.py
-SUPABASE_URL = 'https://seajrglfquchnppqxrhl.supabase.co'
-SUPABASE_KEY = 'sb_publishable_fLxoXW0T5Nck7gXYYWN79Q_FJgEOA6D'
+SUPABASE_URL = os.environ['SUPABASE_URL']
+SUPABASE_KEY = os.environ['SUPABASE_KEY'] 
 
-supabase_headers = {
-    'apikey': SUPABASE_KEY,
-    'Authorization': f'Bearer {SUPABASE_KEY}',
-    'Content-Type': 'application/json'
-}
+if SUPABASE_KEY.startswith('sb_publishable_'):
+    raise SystemExit('SUPABASE_KEY is a publishable key; use the service role/secret key.')
+
+supabase_headers = {'apikey': SUPABASE_KEY, 'Content-Type': 'application/json'}
+if not SUPABASE_KEY.startswith('sb_'):
+    supabase_headers['Authorization'] = f'Bearer {SUPABASE_KEY}'
 
 # Path to the CSV of shop URLs to process. No header row, one URL per row.
 INSTAGRAM_URLS_CSV = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'instagram_urls.csv')
