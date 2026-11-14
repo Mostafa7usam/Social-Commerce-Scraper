@@ -11,13 +11,17 @@ import re
 # ============================================================================
 # CONFIGURATION - Update these variables before running
 # ============================================================================
-APIFY_TOKEN = 'apify_api_CzYokXbkgSiq8nhZ5jAKDX4EqojmLb3G6FnX'
+APIFY_TOKEN = os.environ['APIFY_TOKEN']
 INPUT_CSV = 'instagram_urls.csv'
 DB_FILE = 'scraper.db'
 MAX_SHOPIFY_PAGES = 10
 REQUEST_TIMEOUT = 10
-SUPABASE_URL = 'https://seajrglfquchnppqxrhl.supabase.co'
-SUPABASE_KEY = 'sb_publishable_fLxoXW0T5Nck7gXYYWN79Q_FJgEOA6D'
+SUPABASE_URL = os.environ['SUPABASE_URL']
+SUPABASE_KEY = os.environ['SUPABASE_KEY'] 
+
+if SUPABASE_KEY.startswith('sb_publishable_'):
+    raise SystemExit('SUPABASE_KEY is a publishable key; use the service role/secret key.')
+
 # ============================================================================
 
 
@@ -208,11 +212,9 @@ def scrape_website(url):
 def process_instagram_csv(input_csv, apify_token):
     """Main function to process Instagram URLs from CSV and store in Supabase"""
 
-    supabase_headers = {
-        'apikey': SUPABASE_KEY,
-        'Authorization': f'Bearer {SUPABASE_KEY}',
-        'Content-Type': 'application/json'
-    }
+    supabase_headers = {'apikey': SUPABASE_KEY, 'Content-Type': 'application/json'}
+    if not SUPABASE_KEY.startswith('sb_'):  # legacy JWT keys also need Bearer
+        supabase_headers['Authorization'] = f'Bearer {SUPABASE_KEY}'
 
     def save_to_supabase(result):
         response = requests.post(
